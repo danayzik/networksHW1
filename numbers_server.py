@@ -243,7 +243,6 @@ class Server:
 
 
 
-
 def main() -> None:
     server = Server()
     server.run()
