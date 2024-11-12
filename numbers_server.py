@@ -8,14 +8,20 @@ import select
 INT32_MIN = -2147483648
 INT32_MAX = 2147483647
 
-def find_factors(n):
+def find_prime_factors(n):
     factors = []
-    for i in range(1, int(n ** 0.5) + 1):
-        if n % i == 0:
-            factors.append(i)
-            if i != n // i:
-                factors.append(n // i)
-    return sorted(factors)
+    while n % 2 == 0:
+        factors.append(2)
+        n //= 2
+    factor = 3
+    while factor * factor <= n:
+        while n % factor == 0:
+            factors.append(factor)
+            n //= factor
+        factor += 2
+    if n > 2:
+        factors.append(n)
+    return factors
 
 def check_int32_overflow(result):
     if result > INT32_MAX or result < INT32_MIN:
@@ -52,6 +58,7 @@ def read_users_file(users_file: str) -> list[list[str]]:
 
 def parse_user_passwords(rows: list[list[str]]) -> dict[str, str]:
     user_pass_map = {}
+
     for row in rows:
         if len(row) != 2:
             sys.stderr.write("Invalid users file\n")
@@ -95,10 +102,10 @@ class Server:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind(('', self.port))
         server_socket.listen(self.max_backlog)
-        print(f"Server listening on port {self.port}, can accept {self.max_backlog} clients ")
+        print(f"Server listening on port {self.port}, can have {self.max_backlog} waiting clients buffered ")
         self.listening_socket = server_socket
 
-    def setup_parameters(self):
+    def setup_parameters(self) -> None:
         users_file, port = read_script_inputs()
         self.port = port
         file_rows = read_users_file(users_file)
@@ -126,7 +133,7 @@ class Server:
         self.send_data(client_connection, msg)
         return True
 
-    def send_data(self, client: Client, data: bytes):
+    def send_data(self, client: Client, data: bytes) -> None:
         try:
             client.socket.sendall(data)
         except Exception as e:
@@ -137,14 +144,14 @@ class Server:
         client.close()
         self.clients.remove(client)
 
-    def handle_new_connections(self):
+    def handle_new_connections(self) -> None:
         if self.listening_socket in self.readable:
             client_socket, client_address = self.listening_socket.accept()
             client = Client(client_socket=client_socket, address=client_address)
             self.clients.append(client)
             self.send_data(client, b"Welcome! Please log in.\n")
 
-    def handle_max_command(self, client: Client, args: str):
+    def handle_max_command(self, client: Client, args: str) -> None:
         try:
             args = args.strip('()')
             elements = args.split()
@@ -161,12 +168,12 @@ class Server:
         except ValueError:
             self.send_data(client, b"Invalid number")
             return
-        primes = find_factors(num)
+        primes = find_prime_factors(num)
         msg = f"The prime factors of {num} are: {', '.join(map(str, primes))}"
         self.send_data(client, msg.encode('utf-8'))
 
 
-    def handle_calculate_command(self, client: Client, args: str):
+    def handle_calculate_command(self, client: Client, args: str) -> None:
         valid_operators = ["+", "/", "^", "-", "*"]
         try:
             num1_str, op, num2_str = args.split(" ")
@@ -194,8 +201,14 @@ class Server:
 
     def handle_command(self, client: Client) -> None:
         message = client.message.decode('utf-8')
-        if message == "quit":
+        command_mappings = {
+            "max": self.handle_max_command,
+            "factors": self.handle_factors_command,
+            "calculate": self.handle_calculate_command,
+        }
+        if message == "quit" or message == "":
             self.handle_quit(client)
+            return
         try:
             header, args = message.split(": ")
         except ValueError:
@@ -204,31 +217,34 @@ class Server:
         if header not in self.valid_commands:
             self.send_data(client, b"Invalid command\n")
             return
+        command_mappings[header](client, args)
 
+    def handle_clients(self) -> None:
+        # Iterating over all clients and not just readable sockets is inefficient, we know.
+        for client in self.clients:
+            sock = client.socket
+            if sock in self.readable:
+                client.message = sock.recv(1024)
+                if client.message == b"":
+                    self.handle_quit(client)
+                    continue
+                if not client.logged_in:
+                    if not self.client_login(client):
+                        self.send_data(client, b"Failed to login.\n")
+                else:
+                    self.handle_command(client)
 
-    #Divide this into functions, implement better select logic
-    def run(self):
+    def run(self) -> None:
         while True:
             sockets_lst = [self.listening_socket] + [connection.socket for connection in self.clients]
-            self.readable, writable, xlist = select.select(sockets_lst,
-                                                            [],
-                                                            [],
-                                                            0.2)
+            self.readable, _, _ = select.select(sockets_lst,[],[],0.5)
             self.handle_new_connections()
-            #Iterating over all clients and not just readable sockets is inefficient, we know.
-            for client in self.clients:
-                sock = client.socket
-                if sock in self.readable:
-                    client.message = sock.recv(1024)
-                    if not client.logged_in:
-                        if not self.client_login(client):
-                            self.send_data(client, b"Failed to login.\n")
-                    else:
-                        client.message = sock.recv(1024)
-                        self.handle_command(client)
+            self.handle_clients()
 
 
-def main():
+
+
+def main() -> None:
     server = Server()
     server.run()
 

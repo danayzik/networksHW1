@@ -1,68 +1,75 @@
+#!/usr/bin/python3
 import socket
 import sys
 import select
 
-if len(sys.argv == 1): #host and port are defualt
-    hostname = "local host"
-    port = 1337
-elif len(sys.argv) == 2: #only port is default
-    hostname = sys.argv[1]
-    port = 1337
-elif len(sys.argv) == 3:
-    hostname = sys.argv[1]
-    port = int(sys.argv[2])
-
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((hostname, port))
-
-def login(client_socket):
-    # Prompt the user for credentials
-    username = input("Enter username: ")
-    password = input("Enter password: ")
-
-    # Send credentials to the server in the expected format using sendall
-    client_socket.sendall(f"User: {username}\n".encode())
-    client_socket.sendall(f"Password: {password}\n".encode())
-
-    # Wait for the server's response using select to avoid blocking
-    ready_to_read, _, _ = select.select([client_socket], [], [], 5)  # 5-second timeout
-    if ready_to_read:
-        response = client_socket.recv(1024).decode()
-        print(response)  # Show the server's response
-
-        # Check if login was successful based on the response
-        return "good to see you" in response
+def receive_input() -> tuple[str, int]:
+    if len(sys.argv) == 1:
+        hostname = "localhost"
+        port = 1337
+    elif len(sys.argv) == 2:
+        hostname = sys.argv[1]
+        port = 1337
     else:
-        return False
+        hostname = sys.argv[1]
+        port = int(sys.argv[2])
+    return hostname, port
 
-# Receive welcome message using select
-ready_to_read, _, _ = select.select([client_socket], [], [], 5)  # 5-second timeout
-if ready_to_read:
-    print(client_socket.recv(1024).decode())
-else:
-    print("Failed to receive welcome message. Exiting.")
+def build_socket_and_connect(hostname: str, port: int) -> socket.socket:
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((hostname, port))
+    return client_socket
+
+def login(client_socket: socket.socket) -> bool:
+    username = input("Enter username:\n")
+    password = input("Enter password:\n")
+    msg = f"User: {username}\nPassword: {password}\n"
+    client_socket.sendall(msg.encode())
+    while True:
+        ready_to_read, _, _ = select.select([client_socket], [], [], 2)
+        if ready_to_read:
+            response = client_socket.recv(1024).decode()
+            print(response)
+            return "good to see you" in response
+
+def receive_welcome_message(client_socket: socket.socket) -> None:
+    while True:
+        ready_to_read, _, _ = select.select([client_socket], [], [], 2)
+        if ready_to_read:
+            print(client_socket.recv(1024).decode())
+            return
+
+
+def try_to_login(client_socket: socket.socket) -> None:
+    while not login(client_socket):
+        continue
+
+def send_command_and_get_response(client_socket:socket.socket) -> None:
+    while True:
+        command = input("Enter command:\n")
+        client_socket.sendall(command.encode())
+        if command == 'quit':
+            return
+        while True:
+            ready_to_read, _, _ = select.select([client_socket], [], [], 2)
+            if ready_to_read:
+                response = client_socket.recv(1024).decode()
+                print(response)
+                break
+            else:
+                print("Waiting for server response...")
+
+
+
+def main() -> None:
+    hostname, port = receive_input()
+    client_socket = build_socket_and_connect(hostname, port)
+    receive_welcome_message(client_socket)
+    try_to_login(client_socket)
+    send_command_and_get_response(client_socket)
     client_socket.close()
-    sys.exit(1)
 
-# Log in
-if not login(client_socket):
-    print("Failed to login. Exiting.")
-    client_socket.close()
-    sys.exit(1)
+if __name__ == "__main__":
+    main()
 
-while True:
-    command = input("Enter command: ")
-    client_socket.sendall(command.encode())  # Use sendall for reliability
 
-    # Use select to wait for the server's response
-    ready_to_read, _, _ = select.select([client_socket], [], [], 5)  # 5-second timeout
-    if ready_to_read:
-        response = client_socket.recv(1024).decode()
-        print(response)
-    else:
-        print("No response from server. Continuing...")
-
-    if command.strip() == 'quit':
-        break
-
-client_socket.close()
