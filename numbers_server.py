@@ -2,7 +2,6 @@
 import socket
 import sys
 import csv
-from ast import Bytes
 from typing import Optional
 import select
 
