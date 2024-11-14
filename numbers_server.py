@@ -210,7 +210,7 @@ class Server:
             self.handle_quit(client)
             return
         try:
-            header, args = message.split(": ")
+            header, args = message.split(":")
         except ValueError:
             self.send_data(client, b"Invalid command format\nCorrect format:\ncommand: args")
             return
