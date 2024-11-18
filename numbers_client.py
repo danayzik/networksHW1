@@ -21,9 +21,9 @@ def build_socket_and_connect(hostname: str, port: int) -> socket.socket:
     return client_socket
 
 def login(client_socket: socket.socket) -> bool:
-    username = input("Enter username:\n")
-    password = input("Enter password:\n")
-    msg = f"User: {username}\nPassword: {password}\n"
+    user_str = input()
+    password_str = input()
+    msg = f"{user_str}\n{password_str}"
     client_socket.sendall(msg.encode())
     while True:
         ready_to_read, _, _ = select.select([client_socket], [], [], 2)
@@ -46,7 +46,7 @@ def try_to_login(client_socket: socket.socket) -> None:
 
 def send_command_and_get_response(client_socket:socket.socket) -> None:
     while True:
-        command = input("Enter command:\n")
+        command = input()
         client_socket.sendall(command.encode())
         if command == 'quit':
             return
@@ -56,9 +56,6 @@ def send_command_and_get_response(client_socket:socket.socket) -> None:
                 response = client_socket.recv(1024).decode()
                 print(response)
                 break
-            else:
-                print("Waiting for server response...")
-
 
 
 def main() -> None:

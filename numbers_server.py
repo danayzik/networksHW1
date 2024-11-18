@@ -128,7 +128,7 @@ class Server:
         except Exception as e:
             return False
         client_connection.login(username, password)
-        msg = f"Hi {username}, good to see you.\n"
+        msg = f"Hi {username}, good to see you."
         msg = msg.encode('utf-8')
         self.send_data(client_connection, msg)
         return True
@@ -149,7 +149,7 @@ class Server:
             client_socket, client_address = self.listening_socket.accept()
             client = Client(client_socket=client_socket, address=client_address)
             self.clients.append(client)
-            self.send_data(client, b"Welcome! Please log in.\n")
+            self.send_data(client, b"Welcome! Please log in.")
 
     def handle_max_command(self, client: Client, args: str) -> None:
         try:
@@ -210,7 +210,7 @@ class Server:
             self.handle_quit(client)
             return
         try:
-            header, args = message.split(":")
+            header, args = message.split(": ")
         except ValueError:
             self.send_data(client, b"Invalid command format\nCorrect format:\ncommand: args")
             return
@@ -225,12 +225,12 @@ class Server:
             sock = client.socket
             if sock in self.readable:
                 client.message = sock.recv(1024)
-                if client.message == b"":
+                if client.message == b"" or client.message == b"quit":
                     self.handle_quit(client)
                     continue
                 if not client.logged_in:
                     if not self.client_login(client):
-                        self.send_data(client, b"Failed to login.\n")
+                        self.send_data(client, b"Failed to login.")
                 else:
                     self.handle_command(client)
 
